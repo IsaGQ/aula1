@@ -1,10 +1,9 @@
-package com.hotel.demo.repository;
+/*package com.hotel.demo.repository;
 
 import com.hotel.demo.model.reservacion;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-<<<<<<< HEAD
 import java.util.List;
 import java.util.Optional;
 
@@ -13,12 +12,16 @@ public interface reservarepository extends JpaRepository<reservacion, Long> {
     Optional<reservacion> findByUsuarioIdAndConfirmadaFalse(Long usuarioId);
     List<reservacion> findByUsuarioId(Long usuarioId);
     List<reservacion> findByEstado(String estado);
-=======
-import com.hotel.demo.model.Reservacion;
+}*/
+package com.hotel.demo.repository;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import com.hotel.demo.model.reservacion;
 
 @Repository
 
-public interface ReservaRepository extends JpaRepository<Reservacion, Long> {
+public interface reservarepository extends JpaRepository<reservacion, Long> {
     boolean existsByHabitaciones_Id(Long idHabitacion);
->>>>>>> c1a0f875f92bf93d5a58ec25010063f449105279
 }

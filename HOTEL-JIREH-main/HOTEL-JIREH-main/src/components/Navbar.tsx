@@ -69,7 +69,6 @@ const Navbar = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ correo: loginCorreo, password: loginPassword }),
       });
-<<<<<<< HEAD
       const data = await res.json();
       setLoginLoading(false);
       if (res.ok && data.success) {
@@ -82,18 +81,6 @@ const Navbar = () => {
         try { await refreshCart(); } catch (err) {}
       } else {
         alert(data.message || 'Credenciales inválidas.');
-=======
-
-      const data = await response.json();
-
-      if (response.ok) {
-        alert('Login exitoso');
-        window.open('/admin', '_blank');
-        localStorage.setItem("auth", data.token);
-        setFormVisible(false);
-      } else {
-        alert('Error al iniciar sesión' + data.message);
->>>>>>> c1a0f875f92bf93d5a58ec25010063f449105279
       }
     } catch (err) {
       setLoginLoading(false);
@@ -274,13 +261,6 @@ const Navbar = () => {
 
           {/* Right side */}
           <div className="flex items-center gap-4">
-            <div className="hidden md:block">
-              <Link to="/reserva">
-                <Button variant="outline" className="bg-transparent text-white border-white hover:bg-white hover:text-eco-dark-green">
-                  Reservar Ahora
-                </Button>
-              </Link>
-            </div>
 
             {/* Cart */}
             <div className="relative" ref={dropdownRef}>
@@ -302,7 +282,6 @@ const Navbar = () => {
 
                   {cartLoading && <div className="text-sm">Cargando...</div>}
 
-<<<<<<< HEAD
                   {!cartLoading && (!carrito || !carrito.reservaHabitaciones || carrito.reservaHabitaciones.length === 0) && (
                     <div className="text-sm text-gray-600">Tu carrito está vacío</div>
                   )}
@@ -433,33 +412,6 @@ const Navbar = () => {
             {/* Mobile menu button */}
             <button className="md:hidden text-white" onClick={() => setIsOpen(!isOpen)}>
               {isOpen ? <X size={26} /> : <Menu size={26} />}
-=======
-        {/* Login Form */}
-        {formVisible && (
-          <div className="absolute top-full right-0 mt-2 bg-green-100 text-black p-4 rounded shadow-lg w-72 z-50 border border-green-300">
-            <p className='ext-sm text-green-700 block mb-2 text-center'>Iniciar Sesión</p>
-            <input
-              type="text"
-              placeholder="Usuario"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full mb-2 px-2 py-1 border rounded border-green-300"
-            />
-            <input
-              type="password"
-              placeholder="Contraseña"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full mb-2 px-2 py-1 border rounded border-green-300"
-            />
-            <a href="#" className="text-sm text-green-700 block mb-2 hover:underline">¿Olvidaste tu contraseña?</a>
-            <a href="/registro" className="text-sm text-green-700 block mb-2 hover:underline">¿No tienes una cuenta?</a>
-            <button
-              onClick={handleLogin}
-              className="w-full bg-green-500 text-white py-1 rounded hover:bg-green-600"
-            >
-              Ingresar
->>>>>>> c1a0f875f92bf93d5a58ec25010063f449105279
             </button>
           </div>
         </div>

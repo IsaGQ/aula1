@@ -1,92 +1,168 @@
 // src/services/CarritoService.ts
-import axios from "axios";
+import axios from 'axios';
 
-const API_BASE = "http://localhost:9090"; // ajusta si tu backend corre en otro puerto o ruta
 
-// ---------- TIPOS ----------
-export interface HabitacionMin {
+/**
+ * Configuración básica del cliente HTTP.
+ * Asegúrate que el backend corra en este host:port o cámbialo aquí.
+ */
+const api = axios.create({
+  baseURL: 'http://localhost:9090/api',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+/* -------------------- Tipos -------------------- */
+
+export type ReservaHabitacionDTO = {
   id: number;
-  tipo: string;
-  imagenUrl?: string | null;
-  precioPorNoche: number;
-  capacidad?: number;
-  cantidad?: number; // stock disponible
-}
-
-export interface ReservaHabitacionDTO {
-  id: number;
-  habitacion: HabitacionMin;
+  habitacionId: number;
+  tipo?: string;
+  precioPorNoche?: number;
   cantidad: number;
   subtotal: number;
-}
+  imagenUrl?: string | null;
+};
 
-export interface CarritoDTO {
-  id: number;
-  fechaLlegada: string;
-  fechaSalida: string;
-  precioTotal: number;
+export type CarritoDTO = {
+  id: number | null;
+  userId: string | null;
+  fechaLlegada?: string | null; // "yyyy-MM-dd"
+  fechaSalida?: string | null;
+  precioTotal?: number;
   reservaHabitaciones: ReservaHabitacionDTO[];
-  confirmada?: boolean;
+};
+
+/* Payloads que el backend espera */
+export type AddToCartPayload = {
+  habitacionId: number;
+  cantidad: number;
+  fechaLlegada: string; // "yyyy-MM-dd"
+  fechaSalida: string;  // "yyyy-MM-dd"
+};
+
+export type UpdateItemPayload = {
+  cantidad: number;
+};
+
+/* -------------------- Funciones -------------------- */
+
+/**
+ * Obtener el carrito del usuario (crea uno vacío si no existe).
+ * @param userId string (ej: localStorage.getItem('usuarioId'))
+ */
+export async function obtenerCarrito(userId: string): Promise<CarritoDTO> {
+  try {
+    const res = await api.get<CarritoDTO>(`/carrito/${encodeURIComponent(userId)}`);
+    return res.data;
+  } catch (err) {
+    handleAxiosError(err);
+    throw err;
+  }
 }
 
-// ---------- HEADERS ----------
-const buildHeaders = () => {
-  const token = localStorage.getItem("token");
-  return token
-    ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
-    : { "Content-Type": "application/json" };
-};
+/**
+ * Agregar un item al carrito.
+ * @param userId
+ * @param payload { habitacionId, cantidad, fechaLlegada, fechaSalida }
+ */
+export async function agregarAlCarrito(userId: string, payload: AddToCartPayload): Promise<CarritoDTO> {
+  try {
+    const res = await api.post<CarritoDTO>(`/carrito/${encodeURIComponent(userId)}/items`, payload);
+    return res.data;
+  } catch (err) {
+    handleAxiosError(err);
+    throw err;
+  }
+}
 
-// ---------- SERVICIOS ----------
-/** Obtener carrito del usuario */
-export const obtenerCarrito = async (userId: number | string): Promise<CarritoDTO> => {
-  const res = await axios.get<CarritoDTO>(`${API_BASE}/api/carrito/${userId}`, {
-    headers: buildHeaders(),
-  });
-  return res.data;
-};
+/**
+ * Actualizar la cantidad de un item del carrito.
+ * @param userId
+ * @param reservaItemId id del ReservaHabitacion (item)
+ * @param payload { cantidad }
+ */
+export async function actualizarItemCarrito(
+  userId: string,
+  reservaItemId: number,
+  payload: UpdateItemPayload
+): Promise<CarritoDTO> {
+  try {
+    const res = await api.put<CarritoDTO>(`/carrito/${encodeURIComponent(userId)}/items/${reservaItemId}`, payload);
+    return res.data;
+  } catch (err) {
+    handleAxiosError(err);
+    throw err;
+  }
+}
 
-/** Agregar al carrito */
-export const agregarAlCarrito = async (
-  userId: number | string,
-  payload: { habitacionId: number; cantidad: number; fechaLlegada: string; fechaSalida: string }
-): Promise<any> => {
-  const res = await axios.post(`${API_BASE}/api/carrito/${userId}/agregar`, payload, {
-    headers: buildHeaders(),
-  });
-  return res.data;
-};
+/**
+ * Eliminar un item del carrito.
+ * @param userId
+ * @param reservaItemId
+ */
+export async function eliminarItemCarrito(userId: string, reservaItemId: number): Promise<CarritoDTO> {
+  try {
+    const res = await api.delete<CarritoDTO>(`/carrito/${encodeURIComponent(userId)}/items/${reservaItemId}`);
+    return res.data;
+  } catch (err) {
+    handleAxiosError(err);
+    throw err;
+  }
+}
 
-/** Confirmar carrito (checkout) */
-export const confirmarCarrito = async (userId: number | string): Promise<any> => {
-  const res = await axios.put(`${API_BASE}/api/carrito/${userId}/confirmar`, {}, {
-    headers: buildHeaders(),
-  });
-  return res.data;
-};
+/**
+ * Confirmar carrito -> crea una reservacion en backend y vacía el carrito.
+ * Según el backend que te dejé, los datos del cliente se envían como query params.
+ * Si prefieres enviarlos en el body, puedo adaptar el backend y este método.
+ *
+ * @param userId
+ * @param nombreCompleto
+ * @param cedula
+ * @param celular
+ * @param correo
+ *
+ * Retorna la reservación creada (objeto `reservacion` del backend).
+ */
+export async function confirmarCarrito(
+  userId: string,
+  nombreCompleto: string,
+  cedula: string,
+  celular: string,
+  correo: string
+): Promise<any> {
+  try {
+    const params = new URLSearchParams({
+      nombreCompleto,
+      cedula,
+      celular,
+      correo,
+    });
+    const res = await api.post<any>(`/carrito/${encodeURIComponent(userId)}/confirm?${params.toString()}`);
+    return res.data;
+  } catch (err) {
+    handleAxiosError(err);
+    throw err;
+  }
+}
 
-/** Actualizar cantidad de un item del carrito */
-export const actualizarItemCarrito = async (
-  userId: number | string,
-  reservaHabitacionId: number,
-  payload: { cantidad: number }
-): Promise<any> => {
-  // ✅ Enviar "payload" directamente (no { cantidad } sin definir)
-  const res = await axios.put(
-    `${API_BASE}/api/carrito/${userId}/item/${reservaHabitacionId}`,
-    payload,
-    { headers: buildHeaders() }
-  );
-  return res.data;
-};
+/* -------------------- Helpers -------------------- */
 
-/** Eliminar item del carrito */
-export const eliminarItemCarrito = async (
-  userId: number | string,
-  reservaHabitacionId: number
-): Promise<any> => {
-  const res = await axios.delete(`${API_BASE}/api/carrito/${userId}/item/${reservaHabitacionId}`, {
-    headers: buildHeaders(),
-  });
-  return res.data;
+function handleAxiosError(err: any) {
+  if (err?.response) {
+    console.error('Error HTTP:', err.response.status, err.response.data);
+  } else {
+    console.error('Error de red o desconocido:', err.message);
+  }
+}
+
+
+/* -------------------- Export por defecto (opcional) -------------------- */
+export default {
+  obtenerCarrito,
+  agregarAlCarrito,
+  actualizarItemCarrito,
+  eliminarItemCarrito,
+  confirmarCarrito,
 };

@@ -33,7 +33,6 @@ export default function Cart() {
   const cargarCarrito = async () => {
     try {
       setLoading(true);
-      // obtenerCarrito devuelve CarritoDTO
       const carritoDto = await obtenerCarrito(userId!);
       setCarrito(carritoDto);
     } catch (err) {
@@ -44,10 +43,8 @@ export default function Cart() {
     }
   };
 
-  // Actualizar item: ahora enviamos { cantidad: number } como payload
   const handleUpdateItem = async (reservaId: number, cantidad: number) => {
     try {
-      // aseguramos que cantidad sea number y construimos el payload
       const payload = { cantidad: Number(cantidad) };
       await actualizarItemCarrito(userId!, reservaId, payload);
       await cargarCarrito();
@@ -69,19 +66,35 @@ export default function Cart() {
     }
   };
 
+  /**
+   * Confirmar: pedimos datos del cliente (prompt rápido).
+   * Recomendación: reemplazar este prompt por un modal/form más bonito en producción.
+   */
   const handleConfirm = async () => {
     if (!carrito) return;
     if (!confirm('¿Confirmar la reserva y pagar?')) return;
 
+    // pedir datos del cliente (solución rápida)
+    const nombreCompleto = window.prompt('Nombre completo')?.trim();
+    if (!nombreCompleto) { alert('Nombre requerido'); return; }
+    const cedula = window.prompt('Cédula')?.trim();
+    if (!cedula) { alert('Cédula requerida'); return; }
+    const celular = window.prompt('Celular')?.trim();
+    if (!celular) { alert('Celular requerido'); return; }
+    const correo = window.prompt('Correo electrónico')?.trim();
+    if (!correo) { alert('Correo requerido'); return; }
+
     try {
       setConfirmando(true);
-      await confirmarCarrito(userId!);
+      await confirmarCarrito(userId!, nombreCompleto, cedula, celular, correo);
       alert('Reserva confirmada. Revisa tu correo para más detalles.');
       await cargarCarrito();
       navigate('/mis-reservas');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error al confirmar', err);
-      alert('No se pudo confirmar la reserva.');
+      // mostrar mensaje amigable si backend devuelve info
+      const msg = err?.response?.data?.message || err?.message || 'No se pudo confirmar la reserva.';
+      alert(msg);
     } finally {
       setConfirmando(false);
     }
@@ -110,7 +123,7 @@ export default function Cart() {
           <div>
             <p className="text-gray-600">Fechas: {carrito.fechaLlegada} → {carrito.fechaSalida}</p>
             <p className="text-lg font-semibold">
-              {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(carrito.precioTotal)}
+              {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(carrito.precioTotal || 0)}
             </p>
           </div>
 

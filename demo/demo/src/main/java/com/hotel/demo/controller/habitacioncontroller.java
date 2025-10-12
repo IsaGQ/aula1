@@ -2,8 +2,8 @@ package com.hotel.demo.controller;
 
 import org.springframework.web.bind.annotation.RestController;
 
-import com.hotel.demo.model.Habitacion;
-import com.hotel.demo.service.HabitacionService;
+import com.hotel.demo.model.habitacion;
+import com.hotel.demo.service.habitacionservice;
 
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -28,28 +28,28 @@ import java.nio.file.Paths;
 
 @RestController
 @RequestMapping("/api/habitaciones")
-public class HabitacionController {
+public class habitacioncontroller {
 
     @Autowired
-    private HabitacionService habitacionService;
+    private habitacionservice habitacionService;
 
     @GetMapping
-    public List<Habitacion> listarHabitaciones() {
+    public List<habitacion> listarHabitaciones() {
         return habitacionService.obtenerTodasLasHabitaciones();
     }
 
     @GetMapping("/{id}")
-    public Habitacion obtenerHabitacion(@PathVariable Long id) {
+    public habitacion obtenerHabitacion(@PathVariable Long id) {
         return habitacionService.obtenerHabitacionPorId(id);
     }
 
     @PostMapping
-    public Habitacion crearHabitacion(@RequestBody Habitacion habitacion) {
+    public habitacion crearHabitacion(@RequestBody habitacion habitacion) {
         return habitacionService.crearHabitacion(habitacion);
     }
 
     @PutMapping("/{id}")
-    public Habitacion actualizarHabitacion(@PathVariable Long id, @RequestBody Habitacion habitacion) {
+    public habitacion actualizarHabitacion(@PathVariable Long id, @RequestBody habitacion habitacion) {
         return habitacionService.actualizarHabitacion(id, habitacion);
     }
 

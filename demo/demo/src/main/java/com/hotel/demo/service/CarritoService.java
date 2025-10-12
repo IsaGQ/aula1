@@ -1,242 +1,251 @@
 package com.hotel.demo.service;
 
-import org.springframework.stereotype.Service;
-import org.springframework.beans.factory.annotation.Autowired;
-import jakarta.transaction.Transactional;
-
-import com.hotel.demo.model.Carrito;
-import com.hotel.demo.model.ReservaHabitacion;
-import com.hotel.demo.model.habitacion;
-import com.hotel.demo.model.reservacion;
-import com.hotel.demo.model.Usuario;
-
-import com.hotel.demo.repository.CarritoRepository;
-import com.hotel.demo.repository.ReservaHabitacionRepository;
-import com.hotel.demo.repository.habitacionrespository;
-import com.hotel.demo.repository.reservarepository;
-import com.hotel.demo.repository.UsuarioRepository;
-
-import java.time.temporal.ChronoUnit;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
+import java.util.stream.Collectors;
 
-/**
- * CarritoService consistente con los modelos:
- * - Habitacion
- * - ReservaHabitacion (tiene getHabitacion(), getCantidad(), getSubtotal(), getCarrito(), getId())
- * - Carrito (tiene getFechaLlegada(), getFechaSalida(), getPrecioTotal(), getReservaHabitaciones())
- * - Reservacion
- *
- * Si tus modelos usan nombres distintos, pégamelos y adapto el servicio.
- */
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
+
+import com.hotel.demo.model.*;
+import com.hotel.demo.dto.*;
+import com.hotel.demo.repository.*;
+
 @Service
 public class CarritoService {
 
-    @Autowired
-    private CarritoRepository carritoRepository;
+    private final CarritoRepository carritoRepository;
+    private final ReservaHabitacionRepository reservaHabitacionRepository;
+    private final habitacionrespository habitacionRepository;
+    private final ReservacionService reservacionService;
 
-    @Autowired
-    private ReservaHabitacionRepository reservaHabitacionRepository;
-
-    @Autowired
-    private habitacionrespository habitacionRepository;
-
-    @Autowired
-    private reservarepository reservacionRepository;
-
-    @Autowired
-    private UsuarioRepository usuarioRepository;
-
-    // Obtener o crear carrito del usuario
-    public Carrito obtenerCarrito(Long usuarioId) {
-        return carritoRepository.findByUsuarioId(usuarioId)
-                .orElseGet(() -> {
-                    Carrito nuevo = new Carrito();
-                    nuevo.setUsuarioId(usuarioId);
-                    nuevo.setPrecioTotal(0.0);
-                    return carritoRepository.save(nuevo);
-                });
+    public CarritoService(CarritoRepository carritoRepository,
+                          ReservaHabitacionRepository reservaHabitacionRepository,
+                          habitacionrespository habitacionRepository,
+                          ReservacionService reservacionService) {
+        this.carritoRepository = carritoRepository;
+        this.reservaHabitacionRepository = reservaHabitacionRepository;
+        this.habitacionRepository = habitacionRepository;
+        this.reservacionService = reservacionService;
     }
 
-    // Agregar al carrito
-    @Transactional
-    public Carrito agregarAlCarrito(Long usuarioId, Long habitacionId, Integer cantidad, LocalDate fechaLlegada, LocalDate fechaSalida) {
-        if (cantidad == null || cantidad <= 0) throw new IllegalArgumentException("Cantidad inválida");
-
-        Habitacion h = habitacionRepository.findById(habitacionId)
-                .orElseThrow(() -> new RuntimeException("Habitación no encontrada: " + habitacionId));
-
-        Carrito carrito = obtenerCarrito(usuarioId);
-
-        // Si el cliente envió fechas, actualizarlas en el carrito
-        if (fechaLlegada != null) carrito.setFechaLlegada(fechaLlegada);
-        if (fechaSalida != null) carrito.setFechaSalida(fechaSalida);
-
-        long dias = 1;
-        if (carrito.getFechaLlegada() != null && carrito.getFechaSalida() != null) {
-            dias = ChronoUnit.DAYS.between(carrito.getFechaLlegada(), carrito.getFechaSalida());
-            if (dias <= 0) dias = 1;
-        }
-
-        double precioUnit = h.getPrecioPorNoche() == null ? 0.0 : h.getPrecioPorNoche();
-        double subtotal = precioUnit * cantidad * dias;
-
-        ReservaHabitacion item = new ReservaHabitacion();
-        item.setHabitacion(h);
-        item.setCantidad(cantidad);
-        item.setSubtotal(subtotal);
-        item.setCarrito(carrito);
-
-        // persistir item (necesario para que tenga id si lo vas a usar después)
-        reservaHabitacionRepository.save(item);
-
-        if (carrito.getReservaHabitaciones() == null) carrito.setReservaHabitaciones(new ArrayList<>());
-        carrito.getReservaHabitaciones().add(item);
-
-        carrito.setPrecioTotal((carrito.getPrecioTotal() == null ? 0.0 : carrito.getPrecioTotal()) + subtotal);
-        return carritoRepository.save(carrito);
+    public CarritoDTO obtenerCarrito(String userId) {
+        Carrito carrito = carritoRepository.findByUserId(userId).orElseGet(() -> {
+            Carrito c = new Carrito();
+            c.setUserId(userId);
+            c.setPrecioTotal(0.0);
+            return carritoRepository.save(c);
+        });
+        return toDTO(carrito);
     }
 
-    // Actualizar cantidad item del carrito
     @Transactional
-    public Carrito actualizarItem(Long usuarioId, Long reservaHabitacionId, Integer nuevaCantidad) {
-        if (nuevaCantidad == null || nuevaCantidad <= 0) throw new IllegalArgumentException("Cantidad inválida");
-
-        Carrito carrito = obtenerCarrito(usuarioId);
-
-        ReservaHabitacion item = reservaHabitacionRepository.findById(reservaHabitacionId)
-                .orElseThrow(() -> new RuntimeException("Item no encontrado"));
-
-        // verificar pertenencia
-        if (item.getCarrito() == null || !item.getCarrito().getId().equals(carrito.getId())) {
-            throw new RuntimeException("El item no pertenece al carrito del usuario");
+    public CarritoDTO agregarAlCarrito(String userId, AddToCartRequest req) {
+        if (req.getCantidad() == null || req.getCantidad() < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cantidad inválida");
+        }
+        LocalDate llegada = parseDate(req.getFechaLlegada());
+        LocalDate salida = parseDate(req.getFechaSalida());
+        if (llegada == null || salida == null || !salida.isAfter(llegada)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Fechas inválidas");
         }
 
-        Habitacion h = item.getHabitacion();
-        if (h == null) throw new RuntimeException("Habitación asociada al item no encontrada");
+        Carrito carrito = carritoRepository.findByUserId(userId).orElseGet(() -> {
+            Carrito c = new Carrito();
+            c.setUserId(userId);
+            c.setFechaLlegada(llegada);
+            c.setFechaSalida(salida);
+            return carritoRepository.save(c);
+        });
 
-        long dias = 1;
-        if (carrito.getFechaLlegada() != null && carrito.getFechaSalida() != null) {
-            dias = ChronoUnit.DAYS.between(carrito.getFechaLlegada(), carrito.getFechaSalida());
-            if (dias <= 0) dias = 1;
+        // si el carrito ya tiene fechas y vienen otras, actualizarlas
+        carrito.setFechaLlegada(llegada);
+        carrito.setFechaSalida(salida);
+
+        habitacion hab = habitacionRepository.findById(req.getHabitacionId())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Habitación no encontrada"));
+
+        // No descontamos stock al agregar al carrito; se descuenta al confirmar (o puedes acomodarlo)
+        // Si prefieres reservar stock cuando se agrega al carrito, implementa bloqueo temporal.
+
+        // Buscar si ya existe item para esa habitacion
+        Optional<ReservaHabitacion> existente = carrito.getReservaHabitaciones().stream()
+            .filter(i -> i.getHabitacion().getId().equals(hab.getId()))
+            .findFirst();
+
+        long dias = ChronoUnit.DAYS.between(llegada, salida);
+        if (dias <= 0) dias = 1;
+        double subtotal = hab.getPrecioPorNoche() * dias * req.getCantidad();
+
+        if (existente.isPresent()) {
+            ReservaHabitacion item = existente.get();
+            item.setCantidad(item.getCantidad() + req.getCantidad());
+            item.setSubtotal(item.getSubtotal() + subtotal);
+            reservaHabitacionRepository.save(item);
+        } else {
+            ReservaHabitacion item = new ReservaHabitacion();
+            item.setHabitacion(hab);
+            item.setCantidad(req.getCantidad());
+            item.setSubtotal(subtotal);
+            carrito.addItem(item);
+            reservaHabitacionRepository.save(item);
         }
 
-        double precioUnit = h.getPrecioPorNoche() == null ? 0.0 : h.getPrecioPorNoche();
-        double oldSubtotal = item.getSubtotal() == null ? 0.0 : item.getSubtotal();
-        double newSubtotal = precioUnit * nuevaCantidad * dias;
-
-        item.setCantidad(nuevaCantidad);
-        item.setSubtotal(newSubtotal);
-        reservaHabitacionRepository.save(item);
-
-        carrito.setPrecioTotal((carrito.getPrecioTotal() == null ? 0.0 : carrito.getPrecioTotal()) - oldSubtotal + newSubtotal);
-        return carritoRepository.save(carrito);
-    }
-
-    // Eliminar item
-    @Transactional
-    public Carrito eliminarItem(Long usuarioId, Long reservaHabitacionId) {
-        Carrito carrito = obtenerCarrito(usuarioId);
-
-        ReservaHabitacion item = reservaHabitacionRepository.findById(reservaHabitacionId)
-                .orElseThrow(() -> new RuntimeException("Item no encontrado"));
-
-        if (item.getCarrito() == null || !item.getCarrito().getId().equals(carrito.getId())) {
-            throw new RuntimeException("El item no pertenece al carrito del usuario");
-        }
-
-        double sub = item.getSubtotal() == null ? 0.0 : item.getSubtotal();
-
-        carrito.getReservaHabitaciones().removeIf(i -> i.getId().equals(item.getId()));
-        reservaHabitacionRepository.delete(item);
-
-        carrito.setPrecioTotal((carrito.getPrecioTotal() == null ? 0.0 : carrito.getPrecioTotal()) - sub);
-        return carritoRepository.save(carrito);
-    }
-
-    // Confirmar carrito (solo marcar)
-    @Transactional
-    public Carrito marcarConfirmada(Long usuarioId) {
-        Carrito carrito = obtenerCarrito(usuarioId);
-        carrito.setConfirmada(true);
-        return carritoRepository.save(carrito);
-    }
-
-    // Confirmar carrito y crear reservación (transaccional)
-    @Transactional
-    public Reservacion confirmarCarritoYCrearReservacion(Long usuarioId) {
-        Carrito carrito = carritoRepository.findByUsuarioId(usuarioId)
-                .orElseThrow(() -> new RuntimeException("Carrito no encontrado para usuario " + usuarioId));
-
-        if (carrito.getReservaHabitaciones() == null || carrito.getReservaHabitaciones().isEmpty()) {
-            throw new RuntimeException("Carrito vacío");
-        }
-
-        // Validar stock y descontar
-        for (ReservaHabitacion item : new ArrayList<>(carrito.getReservaHabitaciones())) {
-            Habitacion h = item.getHabitacion();
-            if (h == null || h.getId() == null) {
-                throw new RuntimeException("Habitación inválida en item id=" + item.getId());
-            }
-
-            Habitacion actual = habitacionRepository.findById(h.getId())
-                    .orElseThrow(() -> new RuntimeException("Habitación no encontrada: " + h.getId()));
-
-            int stock = actual.getCantidad() == null ? 0 : actual.getCantidad();
-            int cantidadSolicitada = item.getCantidad() == null ? 0 : item.getCantidad();
-
-            if (stock < cantidadSolicitada) {
-                throw new RuntimeException("Stock insuficiente para habitación id=" + actual.getId());
-            }
-
-            actual.setCantidad(stock - cantidadSolicitada);
-            habitacionRepository.save(actual);
-        }
-
-        // Crear reservación
-        Reservacion reservacion = new Reservacion();
-        Optional<Usuario> optUser = usuarioRepository.findById(usuarioId);
-        if (optUser.isPresent()) {
-            Usuario u = optUser.get();
-            reservacion.setUsuario(u);
-            reservacion.setNombreCompleto(u.getNombre());
-            reservacion.setCorreo(u.getCorreo());
-            reservacion.setCelular(u.getCelular());
-            reservacion.setDireccion(u.getDireccion());
-            reservacion.setDocumentoIdentidad(u.getDocumentoIdentidad());
-        }
-
-        reservacion.setFechaLlegada(carrito.getFechaLlegada());
-        reservacion.setFechaSalida(carrito.getFechaSalida());
-        reservacion.setPrecioTotal(carrito.getPrecioTotal() == null ? 0.0 : carrito.getPrecioTotal());
-        reservacion.setEstado("CONFIRMADA");
-
-        // Mapear items
-        List<ReservaHabitacion> itemsReservacion = new ArrayList<>();
-        for (ReservaHabitacion itemCarrito : new ArrayList<>(carrito.getReservaHabitaciones())) {
-            ReservaHabitacion rh = new ReservaHabitacion();
-            rh.setHabitacion(itemCarrito.getHabitacion());
-            rh.setCantidad(itemCarrito.getCantidad());
-            rh.setSubtotal(itemCarrito.getSubtotal());
-            rh.setReservacion(reservacion);
-            itemsReservacion.add(rh);
-        }
-        reservacion.setReservaHabitaciones(itemsReservacion);
-
-        // Guardar reservación
-        Reservacion saved = reservacionRepository.save(reservacion);
-
-        // Vaciar carrito y eliminar items
-        for (ReservaHabitacion it : new ArrayList<>(carrito.getReservaHabitaciones())) {
-            reservaHabitacionRepository.delete(it);
-        }
-        carrito.getReservaHabitaciones().clear();
-        carrito.setPrecioTotal(0.0);
-        carrito.setConfirmada(true);
+        // recalcular total
+        recalcularTotal(carrito);
         carritoRepository.save(carrito);
 
-        return saved;
+        return toDTO(carrito);
+    }
+
+    @Transactional
+    public CarritoDTO actualizarItem(String userId, Long reservaItemId, UpdateItemRequest req) {
+        Carrito carrito = carritoRepository.findByUserId(userId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Carrito no encontrado"));
+        ReservaHabitacion item = carrito.getReservaHabitaciones().stream()
+            .filter(i -> i.getId().equals(reservaItemId))
+            .findFirst()
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item no encontrado en carrito"));
+
+        if (req.getCantidad() == null || req.getCantidad() < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cantidad inválida");
+        }
+
+        LocalDate llegada = carrito.getFechaLlegada();
+        LocalDate salida = carrito.getFechaSalida();
+        long dias = (llegada != null && salida != null) ? ChronoUnit.DAYS.between(llegada, salida) : 1;
+        if (dias <= 0) dias = 1;
+
+        item.setCantidad(req.getCantidad());
+        item.setSubtotal(item.getHabitacion().getPrecioPorNoche() * req.getCantidad() * dias);
+        reservaHabitacionRepository.save(item);
+
+        recalcularTotal(carrito);
+        carritoRepository.save(carrito);
+
+        return toDTO(carrito);
+    }
+
+    @Transactional
+    public CarritoDTO eliminarItem(String userId, Long reservaItemId) {
+        Carrito carrito = carritoRepository.findByUserId(userId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Carrito no encontrado"));
+        ReservaHabitacion item = carrito.getReservaHabitaciones().stream()
+            .filter(i -> i.getId().equals(reservaItemId))
+            .findFirst()
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item no encontrado"));
+
+        carrito.removeItem(item);
+        reservaHabitacionRepository.delete(item);
+
+        recalcularTotal(carrito);
+        carritoRepository.save(carrito);
+
+        return toDTO(carrito);
+    }
+
+    /**
+     * Confirmar carrito: valida disponibilidad en stock, descuenta stock, crea una reservacion
+     * usando ReservacionService (con DTO) y borra el carrito (o lo vacía).
+     */
+    @Transactional
+    public reservacion confirmarCarrito(String userId, String nombreCompleto, String cedula, String celular, String correo) {
+        Carrito carrito = carritoRepository.findByUserId(userId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Carrito no encontrado"));
+
+        if (carrito.getReservaHabitaciones() == null || carrito.getReservaHabitaciones().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El carrito está vacío");
+        }
+
+        LocalDate llegada = carrito.getFechaLlegada();
+        LocalDate salida = carrito.getFechaSalida();
+        if (llegada == null || salida == null || !salida.isAfter(llegada)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Fechas inválidas en carrito");
+        }
+
+        // Contar por habitacionId
+        Map<Long, Integer> contador = new HashMap<>();
+        for (ReservaHabitacion it : carrito.getReservaHabitaciones()) {
+            contador.put(it.getHabitacion().getId(), contador.getOrDefault(it.getHabitacion().getId(), 0) + it.getCantidad());
+        }
+
+        // Validar disponibilidad
+        for (Map.Entry<Long, Integer> e : contador.entrySet()) {
+            habitacion hab = habitacionRepository.findById(e.getKey())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Habitación no encontrada id: " + e.getKey()));
+            if (hab.getCantidad() < e.getValue()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "No hay suficientes unidades para la habitación id " + e.getKey());
+            }
+        }
+
+        // Preparar ReservacionDTO y items
+        com.hotel.demo.dto.ReservacionDTO reservDto = new com.hotel.demo.dto.ReservacionDTO();
+        reservDto.setNombreCompleto(nombreCompleto);
+        reservDto.setCedula(cedula);
+        reservDto.setCelular(celular);
+        reservDto.setCorreo(correo);
+        reservDto.setFechaLlegada(llegada);
+        reservDto.setFechaSalida(salida);
+
+        List<com.hotel.demo.dto.ReservacionItemDTO> items = contador.entrySet().stream().map(e -> {
+            com.hotel.demo.dto.ReservacionItemDTO it = new com.hotel.demo.dto.ReservacionItemDTO();
+            it.setHabitacionId(e.getKey());
+            it.setCantidad(e.getValue());
+            return it;
+        }).collect(Collectors.toList());
+        reservDto.setItems(items);
+
+        // Llamar al servicio de reservas (descuenta stock dentro de él)
+        reservacion creada = reservacionService.crearReservaDesdeDTO(reservDto);
+
+        // Vaciar carrito (o eliminarlo por completo si prefieres)
+        carrito.getReservaHabitaciones().clear();
+        carrito.setPrecioTotal(0.0);
+        carritoRepository.save(carrito);
+
+        return creada;
+    }
+
+    // ----- helpers -----
+    private void recalcularTotal(Carrito carrito) {
+        double total = carrito.getReservaHabitaciones().stream()
+            .mapToDouble(i -> i.getSubtotal() == null ? 0.0 : i.getSubtotal())
+            .sum();
+        carrito.setPrecioTotal(total);
+    }
+
+    private LocalDate parseDate(String s) {
+        if (s == null) return null;
+        try {
+            return LocalDate.parse(s);
+        } catch (DateTimeParseException ex) {
+            return null;
+        }
+    }
+
+    private CarritoDTO toDTO(Carrito carrito) {
+        CarritoDTO dto = new CarritoDTO();
+        dto.setId(carrito.getId());
+        dto.setUserId(carrito.getUserId());
+        dto.setFechaLlegada(carrito.getFechaLlegada() != null ? carrito.getFechaLlegada().toString() : null);
+        dto.setFechaSalida(carrito.getFechaSalida() != null ? carrito.getFechaSalida().toString() : null);
+        dto.setPrecioTotal(carrito.getPrecioTotal());
+        List<ReservaHabitacionDTO> items = carrito.getReservaHabitaciones().stream().map(i -> {
+            ReservaHabitacionDTO r = new ReservaHabitacionDTO();
+            r.setId(i.getId());
+            r.setHabitacionId(i.getHabitacion().getId());
+            r.setTipo(i.getHabitacion().getTipo());
+            r.setPrecioPorNoche(i.getHabitacion().getPrecioPorNoche());
+            r.setCantidad(i.getCantidad());
+            r.setSubtotal(i.getSubtotal());
+            r.setImagenUrl(i.getHabitacion().getImagenUrl());
+            return r;
+        }).collect(Collectors.toList());
+        dto.setReservaHabitaciones(items);
+        return dto;
     }
 }

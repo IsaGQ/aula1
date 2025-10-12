@@ -1,3 +1,4 @@
+// src/components/AddToCartButton.tsx
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/context/CartContext';
@@ -45,13 +46,13 @@ export default function AddToCartButton({
         fechaSalida
       });
       setLoading(false);
-      // notificar y ejecutar callback opcional
       alert('Habitación agregada al carrito');
       onAdded && onAdded();
     } catch (err: any) {
       setLoading(false);
       console.error('AddToCart error', err);
-      alert(err?.response?.data?.message || err?.message || 'Error al agregar al carrito');
+      const msg = err?.response?.data?.message || err?.message || 'Error al agregar al carrito';
+      alert(msg);
     }
   };
 

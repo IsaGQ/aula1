@@ -1,253 +1,235 @@
 package com.hotel.demo.service;
 
-import com.hotel.demo.model.ReservaHabitacion;
-import com.hotel.demo.model.habitacion;
-import com.hotel.demo.model.reservacion;
-import com.hotel.demo.model.Usuario;
-import com.hotel.demo.repository.ReservaHabitacionRepository;
-import com.hotel.demo.repository.habitacionrespository;
-import com.hotel.demo.repository.reservarepository;
-import com.hotel.demo.repository.UsuarioRepository;
-
-import jakarta.transaction.Transactional;
-import org.springframework.data.domain.*;
+import java.time.temporal.ChronoUnit;
+import java.time.LocalDate;
+import java.util.*;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
-import java.time.temporal.ChronoUnit;
-import java.time.LocalDate;
-import java.util.List;
-import java.util.Optional;
-import java.util.stream.Collectors;
+import com.hotel.demo.model.habitacion;
+import com.hotel.demo.model.reservacion;
+import com.hotel.demo.repository.habitacionrespository;
+import com.hotel.demo.repository.reservarepository;
+import com.hotel.demo.dto.ReservacionDTO;
+import com.hotel.demo.dto.ReservacionItemDTO;
 
 @Service
 public class ReservacionService {
 
-    private final reservarepository reservacionRepository;
-    private final ReservaHabitacionRepository reservaHabitacionRepository;
+    private final reservarepository reservaRepository;
     private final habitacionrespository habitacionRepository;
-    private final UsuarioRepository usuarioRepository;
 
-    public ReservacionService(
-            reservarepository reservacionRepository,
-            ReservaHabitacionRepository reservaHabitacionRepository,
-            habitacionrespository habitacionRepository,
-            UsuarioRepository usuarioRepository) {
-        this.reservacionRepository = reservacionRepository;
-        this.reservaHabitacionRepository = reservaHabitacionRepository;
+    public ReservacionService(reservarepository reservaRepository, habitacionrespository habitacionRepository) {
+        this.reservaRepository = reservaRepository;
         this.habitacionRepository = habitacionRepository;
-        this.usuarioRepository = usuarioRepository;
     }
 
-    /* ---------------------- Listados / consultas ---------------------- */
-
-    public Page<reservacion> listarReservaciones(
-            Integer page,
-            Integer size,
-            String estado,
-            Long usuarioId,
-            LocalDate fechaDesde,
-            LocalDate fechaHasta,
-            String sortBy,
-            String direction
-    ) {
-        int p = page == null || page < 0 ? 0 : page;
-        int s = size == null || size <= 0 ? 20 : size;
-        String sortField = StringUtils.hasText(sortBy) ? sortBy : "createdAt";
-        Sort.Direction dir = "DESC".equalsIgnoreCase(direction) ? Sort.Direction.DESC : Sort.Direction.ASC;
-        Pageable pageable = PageRequest.of(p, s, Sort.by(dir, sortField));
-
-        Page<reservacion> pageResult = reservacionRepository.findAll(pageable);
-
-        List<reservacion> filtered = pageResult.stream()
-                .filter(r -> estado == null || estado.isBlank() || estado.equalsIgnoreCase(r.getEstado()))
-                .filter(r -> usuarioId == null || (r.getUsuario() != null && usuarioId.equals(r.getUsuario().getId())))
-                .filter(r -> {
-                    if (fechaDesde == null && fechaHasta == null) return true;
-                    if (r.getCreatedAt() == null) return false;
-                    boolean afterDesde = fechaDesde == null || !r.getCreatedAt().toLocalDate().isBefore(fechaDesde);
-                    boolean beforeHasta = fechaHasta == null || !r.getCreatedAt().toLocalDate().isAfter(fechaHasta);
-                    return afterDesde && beforeHasta;
-                })
-                .collect(Collectors.toList());
-
-        return new PageImpl<>(filtered, pageable, filtered.size());
+    public List<reservacion> obtenerTodas() {
+        return reservaRepository.findAll();
     }
 
-    public List<reservacion> listarTodas() {
-        return reservacionRepository.findAll();
-    }
-
-    public List<reservacion> listarPorUsuario(Long usuarioId) {
-        return reservacionRepository.findByUsuarioId(usuarioId);
-    }
-
-    public Optional<reservacion> obtenerPorId(Long id) {
-        return reservacionRepository.findById(id);
-    }
-
-    /* ---------------------- Crear / Editar / Eliminar ---------------------- */
-
-    @Transactional
-    public reservacion crearReservacion(reservacion input) {
-        if (input.getUsuario() != null && input.getUsuario().getId() != null) {
-            Usuario u = usuarioRepository.findById(input.getUsuario().getId())
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Usuario no encontrado"));
-            input.setUsuario(u);
-        }
-
-        reservacion saved = reservacionRepository.save(input);
-        recalcularPrecioTotal(saved);
-        return reservacionRepository.save(saved);
+    public reservacion obtenerPorId(Long id) {
+        return reservaRepository.findById(id).orElse(null);
     }
 
     @Transactional
-    public reservacion editarReservacion(Long id, reservacion datos) {
-        reservacion exist = reservacionRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Reservación no encontrada"));
+    public reservacion crearReservaDesdeDTO(ReservacionDTO dto) {
+        validarFechas(dto.getFechaLlegada(), dto.getFechaSalida());
 
-        exist.setFechaLlegada(datos.getFechaLlegada());
-        exist.setFechaSalida(datos.getFechaSalida());
-        exist.setNombreCompleto(datos.getNombreCompleto());
-        exist.setCorreo(datos.getCorreo());
-        exist.setDireccion(datos.getDireccion());
-        exist.setCelular(datos.getCelular());
-        exist.setDocumentoIdentidad(datos.getDocumentoIdentidad());
-        exist.setEstado(datos.getEstado());
-
-        if (datos.getUsuario() != null && datos.getUsuario().getId() != null) {
-            Usuario u = usuarioRepository.findById(datos.getUsuario().getId())
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Usuario no encontrado"));
-            exist.setUsuario(u);
+        // contar por id según items (cada item tiene cantidad)
+        Map<Long, Integer> contador = new HashMap<>();
+        if (dto.getItems() == null || dto.getItems().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debe incluir al menos una habitación en la reserva");
+        }
+        for (ReservacionItemDTO it : dto.getItems()) {
+            if (it.getHabitacionId() == null || it.getCantidad() == null || it.getCantidad() <= 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Item inválido en la reserva");
+            }
+            contador.put(it.getHabitacionId(), contador.getOrDefault(it.getHabitacionId(), 0) + it.getCantidad());
         }
 
-        recalcularPrecioTotal(exist);
-        return reservacionRepository.save(exist);
-    }
-
-    @Transactional
-    public void eliminarReservacion(Long id) {
-        if (!reservacionRepository.existsById(id)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Reservación no encontrada");
-        }
-        reservacionRepository.deleteById(id);
-    }
-
-    /* ---------------------- Items de habitación ---------------------- */
-
-    @Transactional
-    public reservacion agregarItem(Long reservacionId, Long habitacionId, int cantidad) {
-        reservacion r = reservacionRepository.findById(reservacionId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Reservación no encontrada"));
-        habitacion h = habitacionRepository.findById(habitacionId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Habitación no encontrada"));
-
-        ReservaHabitacion rh = new ReservaHabitacion();
-        // ASUMIMOS que ReservaHabitacion tiene setHabitacion(habitacion)
-        rh.setHabitacionId(h);
-        rh.setCantidad(cantidad);
-
-        long dias = 1;
-        if (r.getFechaLlegada() != null && r.getFechaSalida() != null) {
-            dias = ChronoUnit.DAYS.between(r.getFechaLlegada(), r.getFechaSalida());
-            if (dias <= 0) dias = 1;
-        }
-        rh.setSubtotal(h.getPrecioPorNoche() * cantidad * dias);
-        rh.setReservacion(r);
-
-        reservaHabitacionRepository.save(rh);
-        if (r.getReservaHabitaciones() == null) r.setReservaHabitaciones(new java.util.ArrayList<>());
-        r.getReservaHabitaciones().add(rh);
-
-        recalcularPrecioTotal(r);
-        return reservacionRepository.save(r);
-    }
-
-    @Transactional
-    public reservacion actualizarItem(Long reservaHabitacionId, int nuevaCantidad) {
-        ReservaHabitacion rh = reservaHabitacionRepository.findById(reservaHabitacionId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item no encontrado"));
-
-        // aquí obtenemos la habitación asociada correctamente
-        final habitacion h = (rh.getHabitacionId() != null)
-                ? habitacionRepository.findById(rh.getHabitacionId().getId())
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Habitación no encontrada"))
-                : null;
-
-        if (h == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Habitación asociada al item no existe");
+        // validar disponibilidad y cargar habitaciones
+        Map<Long, habitacion> habitacionesMap = new HashMap<>();
+        for (Map.Entry<Long, Integer> e : contador.entrySet()) {
+            Long idHab = e.getKey();
+            int unidades = e.getValue();
+            habitacion habBD = habitacionRepository.findById(idHab)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Habitación no encontrada id: " + idHab));
+            if (habBD.getCantidad() < unidades) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "No hay suficientes unidades para id " + idHab);
+            }
+            habitacionesMap.put(idHab, habBD);
         }
 
-        if (nuevaCantidad <= 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cantidad inválida");
+        // descontar stock
+        for (Map.Entry<Long, Integer> e : contador.entrySet()) {
+            habitacion hab = habitacionesMap.get(e.getKey());
+            hab.setCantidad(hab.getCantidad() - e.getValue());
+            habitacionRepository.save(hab);
         }
 
-        long dias = 1;
-        reservacion r = rh.getReservacion();
-        if (r.getFechaLlegada() != null && r.getFechaSalida() != null) {
-            dias = ChronoUnit.DAYS.between(r.getFechaLlegada(), r.getFechaSalida());
-            if (dias <= 0) dias = 1;
+        // crear entidad reservacion
+        reservacion r = new reservacion();
+        r.setNombreCompleto(dto.getNombreCompleto());
+        r.setCedula(dto.getCedula());
+        r.setCelular(dto.getCelular());
+        r.setCorreo(dto.getCorreo());
+        r.setFechaLlegada(dto.getFechaLlegada());
+        r.setFechaSalida(dto.getFechaSalida());
+        r.setConfirmada(false);
+
+        // construir lista de habitaciones repetidas por cantidad (según tu modelo)
+        List<habitacion> listaHabitaciones = new ArrayList<>();
+        for (Map.Entry<Long, Integer> e : contador.entrySet()) {
+            habitacion hab = habitacionesMap.get(e.getKey());
+            for (int i = 0; i < e.getValue(); i++) listaHabitaciones.add(hab);
         }
+        r.setHabitaciones(listaHabitaciones);
 
-        rh.setCantidad(nuevaCantidad);
-        rh.setSubtotal(h.getPrecioPorNoche() * nuevaCantidad * dias);
-        reservaHabitacionRepository.save(rh);
-
-        recalcularPrecioTotal(r);
-        return reservacionRepository.save(r);
-    }
-
-    @Transactional
-    public reservacion eliminarItem(Long reservaHabitacionId) {
-        ReservaHabitacion rh = reservaHabitacionRepository.findById(reservaHabitacionId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item no encontrado"));
-        reservacion r = rh.getReservacion();
-
-        r.getReservaHabitaciones().removeIf(i -> i.getId().equals(rh.getId()));
-        reservaHabitacionRepository.delete(rh);
-
-        recalcularPrecioTotal(r);
-        return reservacionRepository.save(r);
-    }
-
-    /* ---------------------- Estados y totales ---------------------- */
-
-    @Transactional
-    public reservacion cambiarEstado(Long reservacionId, String nuevoEstado) {
-        reservacion r = reservacionRepository.findById(reservacionId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Reservación no encontrada"));
-
-        r.setEstado(nuevoEstado);
-        return reservacionRepository.save(r);
-    }
-
-    @Transactional
-    public void recalcularPrecioTotal(reservacion r) {
-        if (r == null) return;
-
-        long dias = 1;
-        if (r.getFechaLlegada() != null && r.getFechaSalida() != null) {
-            dias = ChronoUnit.DAYS.between(r.getFechaLlegada(), r.getFechaSalida());
-            if (dias <= 0) dias = 1;
-        }
-
+        long dias = ChronoUnit.DAYS.between(dto.getFechaLlegada(), dto.getFechaSalida());
+        if (dias <= 0) dias = 1;
         double total = 0.0;
+        for (Map.Entry<Long, Integer> e : contador.entrySet()) {
+            habitacion hab = habitacionesMap.get(e.getKey());
+            total += hab.getPrecioPorNoche() * dias * e.getValue();
+        }
+        r.setPrecioTotal(total);
 
-        if (r.getReservaHabitaciones() != null) {
-            for (ReservaHabitacion rh : r.getReservaHabitaciones()) {
-                habitacion h = (rh.getHabitacionId() != null)
-                        ? habitacionRepository.findById(rh.getHabitacionId().getId()).orElse(null)
-                        : null;
-                double precioUnit = (h != null) ? h.getPrecioPorNoche() : 0.0;
-                double subtotal = precioUnit * rh.getCantidad() * dias;
-                rh.setSubtotal(subtotal);
-                reservaHabitacionRepository.save(rh);
-                total += subtotal;
+        return reservaRepository.save(r);
+    }
+
+    @Transactional
+    public reservacion actualizarReserva(Long id, ReservacionDTO dto) {
+        // lógica similar a la que ya tenías: obtener reserva, calcular diferencias, devolver/restar stock, recalcular total
+        reservacion reservaExistente = reservaRepository.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Reserva no encontrada"));
+
+        validarFechas(dto.getFechaLlegada(), dto.getFechaSalida());
+
+        // Contar nuevo
+        Map<Long, Integer> contadorNuevo = new HashMap<>();
+        for (ReservacionItemDTO it : dto.getItems()) {
+            contadorNuevo.put(it.getHabitacionId(), contadorNuevo.getOrDefault(it.getHabitacionId(), 0) + it.getCantidad());
+        }
+
+        // Contar existente (por id)
+        Map<Long, Integer> contadorExistente = new HashMap<>();
+        if (reservaExistente.getHabitaciones() != null) {
+            for (habitacion h : reservaExistente.getHabitaciones()) {
+                if (h != null && h.getId() != null) {
+                    contadorExistente.put(h.getId(), contadorExistente.getOrDefault(h.getId(), 0) + 1);
+                }
             }
         }
 
-        r.setPrecioTotal(total);
+        // validar incrementos de stock
+        for (Map.Entry<Long, Integer> e : contadorNuevo.entrySet()) {
+            int nuevo = e.getValue();
+            int exist = contadorExistente.getOrDefault(e.getKey(), 0);
+            int diff = nuevo - exist;
+            if (diff > 0) {
+                habitacion habBD = habitacionRepository.findById(e.getKey())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Habitación no encontrada id: " + e.getKey()));
+                if (habBD.getCantidad() < diff) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "No hay suficientes unidades para id " + e.getKey());
+                }
+            }
+        }
+
+        // devolver stock de los que disminuyen
+        for (Map.Entry<Long, Integer> e : contadorExistente.entrySet()) {
+            int exist = e.getValue();
+            int nuevo = contadorNuevo.getOrDefault(e.getKey(), 0);
+            int diff = nuevo - exist;
+            if (diff < 0) {
+                habitacion habBD = habitacionRepository.findById(e.getKey()).orElse(null);
+                if (habBD != null) {
+                    habBD.setCantidad(habBD.getCantidad() + Math.abs(diff));
+                    habitacionRepository.save(habBD);
+                }
+            }
+        }
+
+        // restar los incrementos
+        for (Map.Entry<Long, Integer> e : contadorNuevo.entrySet()) {
+            int nuevo = e.getValue();
+            int exist = contadorExistente.getOrDefault(e.getKey(), 0);
+            int diff = nuevo - exist;
+            if (diff > 0) {
+                habitacion habBD = habitacionRepository.findById(e.getKey())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Habitación no encontrada id: " + e.getKey()));
+                habBD.setCantidad(habBD.getCantidad() - diff);
+                habitacionRepository.save(habBD);
+            }
+        }
+
+        // actualizar datos reserva
+        reservaExistente.setNombreCompleto(dto.getNombreCompleto());
+        reservaExistente.setCedula(dto.getCedula());
+        reservaExistente.setCelular(dto.getCelular());
+        reservaExistente.setCorreo(dto.getCorreo());
+        reservaExistente.setFechaLlegada(dto.getFechaLlegada());
+        reservaExistente.setFechaSalida(dto.getFechaSalida());
+
+        // reconstruir lista de habitaciones
+        List<habitacion> lista = new ArrayList<>();
+        for (Map.Entry<Long, Integer> e : contadorNuevo.entrySet()) {
+            habitacion h = habitacionRepository.findById(e.getKey()).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "Habitación no encontrada id: " + e.getKey()));
+            for (int i = 0; i < e.getValue(); i++) lista.add(h);
+        }
+        reservaExistente.setHabitaciones(lista);
+
+        long dias = ChronoUnit.DAYS.between(reservaExistente.getFechaLlegada(), reservaExistente.getFechaSalida());
+        if (dias <= 0) dias = 1;
+        double total = 0.0;
+        for (Map.Entry<Long, Integer> e : contadorNuevo.entrySet()) {
+            habitacion habBD = habitacionRepository.findById(e.getKey()).orElse(null);
+            if (habBD != null) total += habBD.getPrecioPorNoche() * dias * e.getValue();
+        }
+        reservaExistente.setPrecioTotal(total);
+
+        return reservaRepository.save(reservaExistente);
+    }
+
+    @Transactional
+    public void eliminarReserva(Long id) {
+        reservacion reserva = reservaRepository.findById(id).orElse(null);
+        if (reserva == null) return;
+
+        Map<Long, Integer> contador = new HashMap<>();
+        if (reserva.getHabitaciones() != null) {
+            for (habitacion h : reserva.getHabitaciones()) {
+                if (h != null && h.getId() != null) {
+                    contador.put(h.getId(), contador.getOrDefault(h.getId(), 0) + 1);
+                }
+            }
+        }
+
+        for (Map.Entry<Long, Integer> e : contador.entrySet()) {
+            habitacion hab = habitacionRepository.findById(e.getKey()).orElse(null);
+            if (hab != null) {
+                hab.setCantidad(hab.getCantidad() + e.getValue());
+                habitacionRepository.save(hab);
+            }
+        }
+
+        reservaRepository.deleteById(id);
+    }
+
+    public boolean tieneReservasPorHabitacion(Long idHabitacion) {
+        return reservaRepository.existsByHabitaciones_Id(idHabitacion);
+    }
+
+    // util
+    private void validarFechas(LocalDate llegada, LocalDate salida) {
+        if (llegada == null || salida == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Fechas obligatorias");
+        }
+        if (!salida.isAfter(llegada)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Fecha de salida debe ser posterior a llegada");
+        }
     }
 }

@@ -1,4 +1,4 @@
-// src/components/CartItem.tsx
+// src/components/CarItem.tsx
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import type { ReservaHabitacionDTO } from '@/services/CarritoService';
@@ -12,7 +12,7 @@ type Props = {
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value);
 
-export default function CartItem({ item, onUpdate, onRemove }: Props) {
+export default function CarItem({ item, onUpdate, onRemove }: Props) {
   const [cantidad, setCantidad] = useState<number>(item.cantidad);
   const [saving, setSaving] = useState<boolean>(false);
   const [removing, setRemoving] = useState<boolean>(false);
@@ -54,16 +54,16 @@ export default function CartItem({ item, onUpdate, onRemove }: Props) {
   return (
     <div className="flex gap-4 items-center border-b py-4">
       <img
-        src={obtenerUrlImagen(item.habitacion.imagenUrl)}
-        alt={item.habitacion.tipo}
+        src={obtenerUrlImagen(item.imagenUrl)}
+        alt={item.tipo}
         className="w-24 h-20 object-cover rounded"
       />
       <div className="flex-1">
         <div className="flex justify-between items-start">
           <div>
-            <h4 className="font-semibold text-eco-dark-green">{item.habitacion.tipo}</h4>
-            <p className="text-sm text-gray-600">Precio por noche: {formatCurrency(item.habitacion.precioPorNoche)}</p>
-            <p className="text-sm text-gray-600">Subtotal: {formatCurrency(item.subtotal)}</p>
+            <h4 className="font-semibold text-eco-dark-green">{item.tipo}</h4>
+            <p className="text-sm text-gray-600">Precio por noche: {formatCurrency(item.precioPorNoche || 0)}</p>
+            <p className="text-sm text-gray-600">Subtotal: {formatCurrency(item.subtotal || 0)}</p>
           </div>
           <div className="text-right">
             <button

@@ -2,8 +2,8 @@ package com.hotel.demo.controller;
 
 import org.springframework.web.bind.annotation.*;
 
-import com.hotel.demo.model.Servicios;
-import com.hotel.demo.service.ServicioService;
+import com.hotel.demo.model.servicios;
+import com.hotel.demo.service.servicioservice;
 
 import java.util.List;
 
@@ -16,26 +16,26 @@ import java.nio.file.Paths;
 
 @RestController
 @RequestMapping("/api/servicios")
-public class ServiciosController {
+public class servicioscontroller {
 
-    private final ServicioService servicioService;
+    private final servicioservice servicioService;
 
-    public ServiciosController(ServicioService servicioService) {
+    public servicioscontroller(servicioservice servicioService) {
         this.servicioService = servicioService;
     }
 
     @GetMapping
-    public List<Servicios> listarServicios() {
+    public List<servicios> listarServicios() {
         return servicioService.listarServicios();
     }
 
     @PostMapping
-    public Servicios crearServicio(@RequestBody Servicios servicio) {
+    public servicios crearServicio(@RequestBody servicios servicio) {
         return servicioService.guardarServicio(servicio);
     }
 
     @GetMapping("/{id}")
-    public Servicios obtenerServicio(@PathVariable Long id) {
+    public servicios obtenerServicio(@PathVariable Long id) {
         return servicioService.obtenerServicioPorId(id)
                 .orElseThrow(() -> new RuntimeException("Servicio no encontrado con ID: " + id));
     }
@@ -46,15 +46,9 @@ public class ServiciosController {
     }
 
     @PutMapping("/{id}")
-<<<<<<< HEAD
     public servicios actualizarServicio(@PathVariable Long id, @RequestBody servicios servicioActualizado) {
         return servicioService.actualizarServicio(id, servicioActualizado);
     }
-=======
-    public Servicios actualizarServicio(@PathVariable Long id, @RequestBody Servicios servicioActualizado) {
-    return servicioService.actualizarServicio(id, servicioActualizado);
-}
->>>>>>> c1a0f875f92bf93d5a58ec25010063f449105279
 
     @PostMapping("/upload")
     public ResponseEntity<String> subirImagen(@RequestParam("file") MultipartFile file) {

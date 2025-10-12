@@ -1,3 +1,4 @@
+// src/context/CartContext.tsx
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import type { CarritoDTO } from '@/services/CarritoService';
 import {
@@ -20,7 +21,7 @@ type CartContextType = {
   }) => Promise<void>;
   updateItem: (reservaId: number, cantidad: number) => Promise<void>;
   removeItem: (reservaId: number) => Promise<void>;
-  checkout: () => Promise<void>;
+  checkout: (cliente: { nombreCompleto: string; cedula: string; celular: string; correo: string }) => Promise<void>;
 };
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -38,7 +39,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     try {
       setLoading(true);
       const res = await obtenerCarrito(userId);
-      setCarrito(res); // ✅ Corregido: ya no usamos .data
+      setCarrito(res);
     } catch (err) {
       console.error('refreshCart error', err);
       setCarrito(null);
@@ -58,21 +59,12 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     await refreshCart();
   };
 
-  //const updateItem = async (reservaId: number, cantidad: number) => {
-    //if (!userId) throw new Error('Usuario no autenticado');
-    //await actualizarItemCarrito(userId, reservaId, { cantidad: Number(cantidad) } as { cantidad: number });
-    //await refreshCart();
-  //};
-
   const updateItem = async (reservaId: number, cantidad: number) => {
-  if (!userId) throw new Error('Usuario no autenticado');
-
-  // Aseguramos el tipo explícitamente
-  const payload: { cantidad: number } = { cantidad: Number(cantidad) };
-
-  await actualizarItemCarrito(userId, reservaId, payload);
-  await refreshCart();
- };
+    if (!userId) throw new Error('Usuario no autenticado');
+    const payload: { cantidad: number } = { cantidad: Number(cantidad) };
+    await actualizarItemCarrito(userId, reservaId, payload);
+    await refreshCart();
+  };
 
   const removeItem = async (reservaId: number) => {
     if (!userId) throw new Error('Usuario no autenticado');
@@ -80,9 +72,12 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     await refreshCart();
   };
 
-  const checkout = async () => {
+  /**
+   * checkout ahora recibe un objeto cliente { nombreCompleto, cedula, celular, correo }
+   */
+  const checkout = async (cliente: { nombreCompleto: string; cedula: string; celular: string; correo: string }) => {
     if (!userId) throw new Error('Usuario no autenticado');
-    await confirmarCarrito(userId);
+    await confirmarCarrito(userId, cliente.nombreCompleto, cliente.cedula, cliente.celular, cliente.correo);
     await refreshCart();
   };
 

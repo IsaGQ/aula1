@@ -1,48 +1,59 @@
 package com.hotel.demo.controller;
 
 import org.springframework.web.bind.annotation.*;
-import org.springframework.beans.factory.annotation.Autowired;
-import com.hotel.demo.model.Carrito;
+import org.springframework.http.ResponseEntity;
+
+import com.hotel.demo.dto.*;
 import com.hotel.demo.service.CarritoService;
+import com.hotel.demo.model.reservacion;
 
 @RestController
 @RequestMapping("/api/carrito")
-@CrossOrigin(origins = "*")
 public class CarritoController {
 
-    @Autowired
-    private CarritoService carritoService;
+    private final CarritoService carritoService;
 
-    @GetMapping("/{usuarioId}")
-    public Carrito obtenerCarrito(@PathVariable Long usuarioId) {
-        return carritoService.obtenerCarrito(usuarioId);
+    public CarritoController(CarritoService carritoService) {
+        this.carritoService = carritoService;
     }
 
-    @PostMapping("/{usuarioId}/agregar")
-    public Carrito agregarHabitacion(
-            @PathVariable Long usuarioId,
-            @RequestParam Long habitacionId,
-            @RequestParam int cantidad) {
-        return carritoService.agregarHabitacion(usuarioId, habitacionId, cantidad);
+    @GetMapping("/{userId}")
+    public ResponseEntity<CarritoDTO> obtenerCarrito(@PathVariable String userId) {
+        CarritoDTO dto = carritoService.obtenerCarrito(userId);
+        return ResponseEntity.ok(dto);
     }
 
-    @PutMapping("/{usuarioId}/item/{reservaId}")
-    public Carrito actualizarCantidad(
-            @PathVariable Long usuarioId,
-            @PathVariable Long reservaId,
-            @RequestParam int cantidad) {
-        return carritoService.actualizarCantidad(usuarioId, reservaId, cantidad);
+    @PostMapping("/{userId}/items")
+    public ResponseEntity<CarritoDTO> agregarAlCarrito(@PathVariable String userId, @RequestBody AddToCartRequest req) {
+        CarritoDTO dto = carritoService.agregarAlCarrito(userId, req);
+        return ResponseEntity.status(201).body(dto);
     }
 
-    @DeleteMapping("/{usuarioId}/item/{reservaId}")
-    public Carrito eliminarItem(
-            @PathVariable Long usuarioId,
-            @PathVariable Long reservaId) {
-        return carritoService.eliminarItem(usuarioId, reservaId);
+    @PutMapping("/{userId}/items/{reservaItemId}")
+    public ResponseEntity<CarritoDTO> actualizarItem(@PathVariable String userId, @PathVariable Long reservaItemId, @RequestBody UpdateItemRequest req) {
+        CarritoDTO dto = carritoService.actualizarItem(userId, reservaItemId, req);
+        return ResponseEntity.ok(dto);
     }
 
-    @PutMapping("/{usuarioId}/confirmar")
-    public Carrito confirmarCarrito(@PathVariable Long usuarioId) {
-        return carritoService.confirmarCarrito(usuarioId);
+    @DeleteMapping("/{userId}/items/{reservaItemId}")
+    public ResponseEntity<CarritoDTO> eliminarItem(@PathVariable String userId, @PathVariable Long reservaItemId) {
+        CarritoDTO dto = carritoService.eliminarItem(userId, reservaItemId);
+        return ResponseEntity.ok(dto);
+    }
+
+    /**
+     * Confirmar carrito: recibimos datos del cliente mínimo (nombre, cedula, celular, correo).
+     * Frontend puede pedir un modal con formulario para estos datos antes de llamar este endpoint.
+     */
+    @PostMapping("/{userId}/confirm")
+    public ResponseEntity<reservacion> confirmarCarrito(
+            @PathVariable String userId,
+            @RequestParam String nombreCompleto,
+            @RequestParam String cedula,
+            @RequestParam String celular,
+            @RequestParam String correo) {
+
+        reservacion creada = carritoService.confirmarCarrito(userId, nombreCompleto, cedula, celular, correo);
+        return ResponseEntity.ok(creada);
     }
 }

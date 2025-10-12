@@ -1,6 +1,5 @@
 package com.hotel.demo.controller;
 
-<<<<<<< HEAD
 import com.hotel.demo.model.Usuario;
 import com.hotel.demo.service.UsuarioService;
 import org.springframework.web.bind.annotation.*;
@@ -96,106 +95,6 @@ public class AuthController {
             }
         } catch (Exception ex) {
             return new LoginResponse(false, null, null, null, null, "Error interno en login");
-=======
-import java.util.HashMap;
-import java.util.Map;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.repository.query.Param;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.web.bind.annotation.*;
-
-import com.hotel.demo.config.JwtUtil;
-import com.hotel.demo.dto.RegisterForm;
-import com.hotel.demo.model.Cliente;
-import com.hotel.demo.model.Usuario;
-import com.hotel.demo.repository.UsuarioRepository;
-import com.hotel.demo.service.AuthService;
-
-import jakarta.transaction.Transactional;
-
-import com.hotel.demo.repository.ClienteRepository;
-import com.hotel.demo.dto.UsuarioDTO;
-
-@RestController
-@RequestMapping("/api/auth")
-public class AuthController {
-
-    @Autowired
-    private UsuarioRepository usuarioRepository;
-    @Autowired
-    private ClienteRepository clienteRepository;
-    @Autowired
-    private PasswordEncoder passwordEncoder;
-    @Autowired
-    private AuthService authService;
-
-    private static final JwtUtil jwtUtil = new JwtUtil();
-
-    @PostMapping("/register")
-    @Transactional
-    public ResponseEntity<Map<String, Object>> register(@RequestBody RegisterForm registerForm) {
-        Usuario existingUser = usuarioRepository.findByUsername(registerForm.getUsername());
-
-        if (existingUser != null) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("status", 400);
-            error.put("message", "El usuario ya existe");
-            return ResponseEntity.badRequest().body(error);
         }
-
-        Usuario usuario = new Usuario();
-        usuario.setPassword(passwordEncoder.encode(registerForm.getPassword()));
-        usuario.setUsername(registerForm.getUsername());
-        System.out.println(registerForm.getUsername());
-
-        Cliente cliente = new Cliente();
-        cliente.setNombreCompleto(registerForm.getNombreCompleto());
-        cliente.setCelular(registerForm.getCelular());
-        cliente.setCorreo(registerForm.getCorreo());
-        cliente.setDireccion(registerForm.getDireccion());
-        cliente.setUsuario(usuario);
-
-        usuarioRepository.save(usuario);
-        clienteRepository.save(cliente);
-
-        Map<String, Object> success = new HashMap<>();
-        success.put("status", 201);
-        success.put("message", "Usuario registrado correctamente");
-        return ResponseEntity.status(HttpStatus.CREATED).body(success);
     }
-
-    @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody Usuario loginRequest) {
-        Usuario usuario = usuarioRepository.findByUsername(loginRequest.getUsername());
-
-        if (usuario == null || !passwordEncoder.matches(loginRequest.getPassword(), usuario.getPassword())) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("message", "Credenciales incorrectas"));
->>>>>>> c1a0f875f92bf93d5a58ec25010063f449105279
-        }
-
-        String token = jwtUtil.generateToken(usuario.getUsername());
-        UsuarioDTO usuarioDTO = new UsuarioDTO(usuario.getId(), usuario.getUsername(), usuario.getUsername());
-
-        return ResponseEntity.ok(Map.of(
-                "message", "Acceso correcto",
-                "token", token,
-                "usuario", usuarioDTO
-        ));
-    }
-
-    @GetMapping("/isAuthenticated/{token}")
-    public ResponseEntity<?> isAuthenticated(@PathVariable String token) {
-        if (authService.isAuthenticated(token)) {
-            return ResponseEntity.ok().build();
-        }
-
-        return ResponseEntity.badRequest().body(Map.of("message", "Usuario no autenticado"));
-    }
-
 }

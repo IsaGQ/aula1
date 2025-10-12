@@ -1,18 +1,10 @@
-package com.hotel.demo.model;
+package com.hotel.demo.dto;
 
 import java.time.LocalDate;
 import java.util.List;
-import jakarta.persistence.*;
 import com.fasterxml.jackson.annotation.JsonFormat;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
-@Entity
-@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
-public class reservacion {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
+public class ReservacionDTO {
     private String nombreCompleto;
     private String cedula;
     private String celular;
@@ -24,47 +16,21 @@ public class reservacion {
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
     private LocalDate fechaSalida;
 
-    private Double precioTotal;
+    private List<ReservacionItemDTO> items;
 
-    // tabla puente explícita para claridad
-    @ManyToMany
-    @JoinTable(
-        name = "reservacion_habitacion",
-        joinColumns = @JoinColumn(name = "reservacion_id"),
-        inverseJoinColumns = @JoinColumn(name = "habitacion_id")
-    )
-    private List<habitacion> habitaciones;
-
-    private boolean confirmada;
-
-    // Getters y Setters (corrigiendo nombres)
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-
+    // getters y setters...
     public String getNombreCompleto() { return nombreCompleto; }
     public void setNombreCompleto(String nombreCompleto) { this.nombreCompleto = nombreCompleto; }
-
     public String getCedula() { return cedula; }
     public void setCedula(String cedula) { this.cedula = cedula; }
-
     public String getCelular() { return celular; }
     public void setCelular(String celular) { this.celular = celular; }
-
     public String getCorreo() { return correo; }
     public void setCorreo(String correo) { this.correo = correo; }
-
     public LocalDate getFechaLlegada() { return fechaLlegada; }
     public void setFechaLlegada(LocalDate fechaLlegada) { this.fechaLlegada = fechaLlegada; }
-
     public LocalDate getFechaSalida() { return fechaSalida; }
     public void setFechaSalida(LocalDate fechaSalida) { this.fechaSalida = fechaSalida; }
-
-    public Double getPrecioTotal() { return precioTotal; }
-    public void setPrecioTotal(Double precioTotal) { this.precioTotal = precioTotal; }
-
-    public List<habitacion> getHabitaciones() { return habitaciones; }
-    public void setHabitaciones(List<habitacion> habitaciones) { this.habitaciones = habitaciones; }
-
-    public boolean isConfirmada() { return confirmada; }
-    public void setConfirmada(boolean confirmada) { this.confirmada = confirmada; }
+    public List<ReservacionItemDTO> getItems() { return items; }
+    public void setItems(List<ReservacionItemDTO> items) { this.items = items; }
 }

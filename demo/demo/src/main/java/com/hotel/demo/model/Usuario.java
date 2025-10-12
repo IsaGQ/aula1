@@ -11,21 +11,7 @@ public class Usuario {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-<<<<<<< HEAD
     private String nombre;
-=======
-    private String username;
-    private String password;
-    private boolean isAdmin = false;
-
-    public boolean getIsAdmin() {
-        return isAdmin;
-    }
-
-    public void setIsAdmin(boolean isAdmin) {
-        this.isAdmin = isAdmin;
-    }
->>>>>>> c1a0f875f92bf93d5a58ec25010063f449105279
 
     @Column(nullable = false, unique = true)
     private String correo;

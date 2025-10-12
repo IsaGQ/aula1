@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 // EJEMPLO de URLs DIRECTAS a imágenes (reemplaza por tus imágenes subidas o por URLs directas válidas)
 const sliderImages = [
   {
-<<<<<<< HEAD
     url: "https://revistasumma.com/wp-content/uploads/2021/10/IMG_20211002_111946-scaled-1.jpg",
     alt: "San carlos"
   },
@@ -19,22 +18,6 @@ const sliderImages = [
   {
     url: "https://cdn.pixabay.com/photo/2023/05/13/17/43/water-7991010_1280.jpg",
     alt: "Bosque"
-=======
-    url: "./src/image/cas.jpg",
-    alt: "San carlos"
-  },
-  {
-    url: "./src/image/jm.jpg",
-    alt: "Iglesia de San Carlos"
-  },
-  {
-    url: "./src/image/agua.jpg",
-    alt: "Paisaje montañoso alrededor del lodge"
-  },
-  {
-    url: "./src/image/mon.jpeg",
-    alt: "Bosque donde se encuentra el lodge ecológico"
->>>>>>> c1a0f875f92bf93d5a58ec25010063f449105279
   }
 ];
 
